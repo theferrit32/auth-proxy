@@ -1,0 +1,9 @@
+{
+    "flask_port": 5000,
+    "auth_service_key": "",
+    "secret_key": "",
+    "default_proxy_destination": "",
+    "whitelist": ["myuser@domain"],
+    "validate_url": "https://auth.service.localdomain/validate_token?provider=auth0&access_token={token}",
+    "auth_url": "https://auth.service.localdomain/authorize?provider=auth0&scope=openid%20profile%20email"
+}
