@@ -10,7 +10,6 @@ import requests
 #TODO jsonschema would be better
 required_configs_strings = [
     'auth_service_key',
-    'secret_key',
     'default_proxy_destination',
     'whitelist',
     'validate_url',
@@ -22,7 +21,10 @@ with open('config.json') as f:
         if s not in config:
             raise RuntimeError('config.json must have field [{}]'.format(s))
 app = Flask(__name__, static_url_path='/static/')
-app.secret_key = config['secret_key'].encode('utf-8')
+if config.get('secret_key', None):
+    app.secret_key = config['secret_key'].encode('utf-8')
+else:
+    app.secret_key = base64.b64encode(os.urandom(24))
 auth_service_key = config['auth_service_key']
 whitelist = config['whitelist']
 if os.getenv('OAUTH_WHITELIST'):
@@ -31,6 +33,10 @@ if os.getenv('OAUTH_WHITELIST'):
         whitelist = json.loads(whitelist)
     except json.JSONDecodeError as e:
         whitelist = [whitelist]
+# due to pivot constraint, convert any instances of %at% to @
+for w in whitelist.copy():
+    whitelist.remove(w)
+    whitelist.append(w.replace('%at%', '@'))
 
 @app.route('/<path:path>')
 @app.route('/', defaults={'path': ''})
