@@ -86,6 +86,7 @@ def index(path):
         ))
         return do_reauth()
     print('user was not whitelisted, response: {}'.format(body))
+    return do_reauth()
 
 def do_reauth():
     auth_url = config['auth_url']
