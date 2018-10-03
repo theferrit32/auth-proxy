@@ -36,7 +36,7 @@ if os.getenv('OAUTH_WHITELIST'):
 # due to pivot constraint, convert any instances of %at% to @
 for w in whitelist.copy():
     whitelist.remove(w)
-    whitelist.append(w.replace('%at%', '@'))
+    whitelist.append(w.replace('%at%', '@').lower())
 
 @app.route('/<path:path>')
 @app.route('/', defaults={'path': ''})
@@ -75,9 +75,9 @@ def index(path):
     
     if body.get('active', False) == True:
         # check response user against whitelist
-        if body.get('user_name', None) in whitelist \
-                or body.get('username', None) in whitelist \
-                or  body.get('email', None) in whitelist:
+        if body.get('user_name', None).lower() in whitelist \
+                or body.get('username', None).lower() in whitelist \
+                or  body.get('email', None).lower() in whitelist:
             ret = do_proxy(path)
             return ret
         else:
