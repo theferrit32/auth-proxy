@@ -75,17 +75,17 @@ def index(path):
     
     if body.get('active', False) == True:
         # check response user against whitelist
-        if body.get('user_name', None).lower() in whitelist \
-                or body.get('username', None).lower() in whitelist \
-                or  body.get('email', None).lower() in whitelist:
-            ret = do_proxy(path)
-            return ret
-        else:
-            return do_reauth()
-    print('token validation to [{}] failed, returned status [{}]: {}'.format(
-        validate_url, resp.status_code, body
-    ))
-    return do_reauth()
+        fields_to_check = ['user_name', 'username', 'email']
+        for field in fields_to_check:
+            if field in body and body[field].lower() in whitelist:
+                ret = do_proxy(path)
+                return ret
+    else:
+        print('token validation to [{}] failed, returned status [{}]: {}'.format(
+            validate_url, resp.status_code, body
+        ))
+        return do_reauth()
+    print('user was not whitelisted, response: {}'.format(body))
 
 def do_reauth():
     auth_url = config['auth_url']
