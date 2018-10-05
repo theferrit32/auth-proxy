@@ -6,6 +6,26 @@ import base64
 from flask import Flask, request, make_response, session
 import requests
 
+
+import logging
+
+# These two lines enable debugging at httplib level (requests->urllib3->http.client)
+# You will see the REQUEST, including HEADERS and DATA, and RESPONSE with HEADERS but without DATA.
+# The only thing missing will be the response.body which is not logged.
+
+try:
+    import http.client as http_client
+except ImportError:
+    # Python 2
+    import httplib as http_client
+http_client.HTTPConnection.debuglevel = 1
+# You must initialize logging, otherwise you'll not see debug output.
+logging.basicConfig()
+logging.getLogger().setLevel(logging.DEBUG)
+requests_log = logging.getLogger("requests.packages.urllib3")
+requests_log.setLevel(logging.DEBUG)
+requests_log.propagate = True
+
 # Configs only loaded at startup
 #TODO jsonschema would be better
 required_configs_strings = [
@@ -38,10 +58,10 @@ for w in whitelist.copy():
     whitelist.remove(w)
     whitelist.append(w.replace('%at%', '@').lower())
 
-@app.route('/<path:path>')
-@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@app.route('/', defaults={'path': ''}, methods=['GET', 'POST', 'PUT', 'DELETE'])
 def index(path):
-    #print('index path: ' + str(path))
+    print('\n\nindex path: ' + str(path))
     
     if 'Authorization' in request.headers:
         print('authorization header found')
@@ -103,6 +123,8 @@ def do_reauth():
 # doesn't forward any client headers to destination, but does 
 # forward Content-Type back to client from destination
 def do_proxy(path=None):
+    method = request.method
+    allow_redirects = False
     if path and path[0] != '/':
         path = '/' + path
     PROXY_DESTINATION = config['default_proxy_destination']
@@ -110,25 +132,73 @@ def do_proxy(path=None):
         PROXY_DESTINATION += path
     print('requesting proxied file: ' + str(PROXY_DESTINATION))
     #TODO handle request methods other than GET
-    #req_headers = {}
-    #to_forward = ['Content-Type', 'Location', 'Cookie']
-    #for k,v in request.headers:
-    #    req_headers[k] = v
-    resp = requests.get(PROXY_DESTINATION, allow_redirects=False)
-
+    req_headers = {}
+    to_forward = ['content-type', 'location', 'cookie']
+    for k,v in request.headers:
+        if k.lower() in to_forward:
+            print('request header: [{}: {}]'.format(k, v))
+            req_headers[k] = v
+    if method == 'GET':
+        print('doing GET: ' + PROXY_DESTINATION)
+        resp = requests.get(
+            PROXY_DESTINATION,
+            headers=req_headers,
+            allow_redirects=allow_redirects,
+            params=request.args,
+            cookies=request.cookies)
+    elif method == 'POST':
+        print('doing POST: ' + PROXY_DESTINATION)
+        print('post data: ' + str(request.form))
+        print('post args: ' + str(request.args))
+        resp = requests.post(
+            PROXY_DESTINATION,
+            headers=req_headers,
+            allow_redirects=allow_redirects,
+            params=request.args,
+            data=request.form,
+            cookies=request.cookies)
+    elif method == 'PUT':
+        print('doing PUT: ' + PROXY_DESTINATION)
+        print(str(vars(request)))
+        for val in request.form:
+            print('put data val: ' + str(val))
+        #print('put data: ' + str(request.form))
+        print('put args: ' + str(request.args))
+        #print('put cookies: ' + str(request.cookies))
+        resp = requests.put(
+            PROXY_DESTINATION,
+            headers=req_headers,
+            allow_redirects=allow_redirects,
+            params=request.args,
+            data=request.form,
+            #cookies=request.cookies
+        )
+    elif method == 'DELETE':
+        resp = requests.delete(PROXY_DESTINATION,
+            headers=req_headers,
+            allow_redirects=allow_redirects,
+            params=request.args,
+            #cookies=request.cookies
+        )
+    else:
+        raise RuntimeError('Invalid proxy request method')
     # construct response
     ret = make_response(resp.content, resp.status_code)
-    headers = {}
-    for h_key in resp.headers:
-        headers[h_key.lower()] = resp.headers[h_key]
-    # list of response headers from destination to forward back to requester
-    to_forward = ['Content-Type', 'Location', 'Cookie']
-    for h in to_forward:
-        if h.lower() in headers:
-            print('setting response header [{}={}]'.format(h, headers[h.lower()]))
-            ret.headers[h] = headers[h.lower()]
+    #print('response cookies: ' + str(resp.cookies))
+    for c in resp.cookies:
+        print('response cookie [{}: {}]'.format(c.name, c.value))
+        ret.set_cookie(c.name, c.value)
+    #headers = {}
     #for h_key in resp.headers:
-    #   ret.headers[h_key] = resp.headers[h_key]
+    #    headers[h_key.lower()] = resp.headers[h_key]
+    # list of response headers from destination to forward back to requester
+    #to_forward = ['Content-Type', 'Location', 'Cookie']
+    #for h in to_forward:
+    #    if h.lower() in headers:
+    #        print('setting response header [{}={}]'.format(h, headers[h.lower()]))
+    #        ret.headers[h] = headers[h.lower()]
+    for h_key in resp.headers:
+       ret.headers[h_key] = resp.headers[h_key]
     return ret
 
 
